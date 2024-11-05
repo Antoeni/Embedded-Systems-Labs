@@ -1,0 +1,64 @@
+#include <ti/devices/msp432p4xx/driverlib/driverlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+#define BAUD_RATE 9600 // Define the baud rate
+
+#define setPorts P1->SEL0 = P1->SEL0 & ~(BIT2 | BIT3)
+#define setGPIO P1->SEL1 = P1->SEL1 & ~(BIT2 | BIT3)
+#define setOut P1->DIR = P1->DIR| BIT3
+#define setHigh P1->OUT = P1->OUT | BIT3
+#define setLow P1->OUT = P1->OUT & ~BIT3
+
+#define DELAY_TIME_9600 ((3000000/BAUD_RATE) - 12.5)
+#define DELAY_TIME (3000000/BAUD_RATE)
+
+void send_message(const char* msg);
+
+int main(void){
+    WDT_A_holdTimer();
+
+    setPorts;
+    setGPIO;
+    setOut;
+    setHigh;
+
+    __delay_cycles(100 * 3000); // Delay for 100ms
+    static char something[] = {0x0d, 0x0a, 0x56, 0x52, 0x4f, 0x4f, 0x4d, 0x4d, 0x4d, 0x4d, 0x4d, 0x20, 0x20, 0x20, 0x20, 0x20,
+                                0x5f, 0x5f, 0x5f, 0x5f, 0x5f, 0x5f, 0x0d, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+                                0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x2f, 0x7c, 0x5f, 0x7c, 0x7c, 0x5f, 0x5c, 0x60, 0x2e, 0x5f,
+                                0x5f, 0x0d, 0x0a, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x28,
+                                0x20, 0x20, 0x20, 0x5f, 0x20, 0x20, 0x20, 0x20, 0x5f, 0x20, 0x5f, 0x5c, 0x0d, 0x0a, 0x20,
+                                0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x3d, 0x60, 0x2d, 0x28, 0x5f,
+                                0x29, 0x2d, 0x2d, 0x28, 0x5f, 0x29, 0x2d, 0x27, 0x0d, 0x0a, 0x00};
+
+    while(1){
+        if(GPIO_getInputPinValue(GPIO_PORT_P1, GPIO_PIN2)==0){
+                    send_message(something);
+           }
+
+    }
+}
+
+void send_message(const char* msg)
+{
+    while(*msg != '\0'){
+        setLow;
+        __delay_cycles(DELAY_TIME_9600); // Delay for one bit duration
+        int i;
+        for(i = 0; i < 8; i++){
+            if((*msg >> i) & 1){
+                setHigh;
+            }
+            else{
+                setLow;
+            }
+            __delay_cycles(DELAY_TIME_9600); // Delay for one bit duration
+
+        }
+        setHigh;
+        __delay_cycles(DELAY_TIME_9600); // Delay for one bit duration
+        msg++;
+    }
+}
