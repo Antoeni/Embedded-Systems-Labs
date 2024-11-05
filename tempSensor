@@ -1,0 +1,78 @@
+/* DriverLib Includes */
+#include <ti/devices/msp432p4xx/driverlib/driverlib.h>
+/* Standard Includes */
+#include <stdint.h>
+#include <stdio.h>
+#include <stdbool.h>
+#include <math.h>
+
+volatile bool adc_done;
+
+int main(void)
+    {
+    // Halt WDT
+        WDT_A_holdTimer();
+        printf("MCLK: %u\n", MAP_CS_getMCLK());
+
+        // Set reference voltage to 1.2 V and enable temperature sensor
+        REF_A_enableReferenceVoltage();
+        REF_A_enableTempSensor();
+        REF_A_setReferenceVoltage(REF_A_VREF1_2V);
+
+        // Initializing ADC (MCLK/1/1) with temperature sensor routed
+        ADC14_enableModule();
+        ADC14_initModule(ADC_CLOCKSOURCE_MCLK, ADC_PREDIVIDER_1, ADC_DIVIDER_1, ADC_TEMPSENSEMAP);
+
+        // Set resolution
+        ADC14_setResolution(ADC_14BIT);
+
+        // Configure ADC Memory for temperature sensor data
+        ADC14_configureSingleSampleMode(ADC_MEM0, false);
+        ADC14_configureConversionMemory(ADC_MEM0, ADC_VREFPOS_INTBUF_VREFNEG_VSS, ADC_INPUT_A22, false);
+
+        // Configure the sample/hold time
+        ADC14_setSampleHoldTime(ADC_PULSE_WIDTH_192, ADC_PULSE_WIDTH_192);
+
+        // Enable sample timer in manual iteration mode and interrupts
+        ADC14_enableSampleTimer(ADC_MANUAL_ITERATION);
+
+        // Enable conversion
+        ADC14_enableConversion();
+
+        // Enabling Interrupts
+        ADC14_enableInterrupt(ADC_INT0);
+        Interrupt_enableInterrupt(INT_ADC14);
+        Interrupt_enableMaster();
+
+        uint16_t degrees_30 = SysCtl_getTempCalibrationConstant(SYSCTL_1_2V_REF, SYSCTL_30_DEGREES_C);//y1
+        uint16_t degrees_85 = SysCtl_getTempCalibrationConstant(SYSCTL_1_2V_REF, SYSCTL_85_DEGREES_C);//y2
+        //m = (y2-y1)/ (x2-x1)
+        float m = ((float)degrees_85 -(float)degrees_30)/(85-30);
+        //y = mx + b
+        float b = degrees_30 - (m * 30);
+        while(1){
+                    // Trigger conversion with software
+                    adc_done = false;
+                    ADC14_toggleConversionTrigger();
+                    while (!adc_done)
+                    {
+                    }
+                    uint32_t adc_value = ADC14_getResult(ADC_MEM0);
+                    float temp = ((adc_value - b)/m) * 1.8 + 32;
+                    printf("Temp: %.02f\n", temp);
+                    __delay_cycles(500 * 3000);
+        }
+    }
+
+// This interrupt happens every time a conversion has completed
+void ADC14_IRQHandler(void)
+{
+    uint64_t status;
+    status = ADC14_getEnabledInterruptStatus();
+    ADC14_clearInterruptFlag(status);
+
+    if(status & ADC_INT0)
+    {
+        adc_done = true;
+    }
+}
