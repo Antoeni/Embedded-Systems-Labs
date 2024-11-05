@@ -1,0 +1,72 @@
+#include <ti/devices/msp432p4xx/driverlib/driverlib.h>
+#include <stdint.h>
+#include <stdbool.h>
+#include <stdio.h>
+
+uint32_t bank0begin = 0x0;
+uint32_t bank0end = 0x1FFFF;
+
+uint32_t bank1begin = 0x20000;
+uint32_t bank1end = 0x3FFFF;
+
+
+bool get_flash_bank_sector(uint32_t mem_address, uint32_t* bank_number, uint32_t* sector_mask){
+    uint32_t sector_num = 0;
+    if(bank0begin < mem_address && mem_address <= bank0end){//checks to see if the bank is 0
+        sector_num = (mem_address - bank0begin)/4096;//finds the sector number
+        *bank_number = 0x01; //Sets the bank number to 0, which there are 2 banks
+        *sector_mask = 1 << sector_num;//sets the sector mask
+    }
+    else if(bank1begin < mem_address && mem_address <= bank1end){
+        sector_num = (mem_address - bank1begin)/4096;//finds the sector number
+        *bank_number = 0x02; //Sets the bank number to 1, which there are 2 banks
+        *sector_mask = 1 << sector_num;//sets the sector mask
+    }
+    else{
+        return false;
+    }
+    return true;
+}
+
+const uint32_t counter[] = {0b11111};//sets the constant counter
+
+void main(void)
+{
+
+        //Setting outputs to low port 1
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN0);//red
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN1);//green
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P1, GPIO_PIN2);//blue
+        //Setting outputs to low port 2
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN0);
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
+        MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN2);
+        //Setting as outputs port 1
+        MAP_GPIO_setAsOutputPin(GPIO_PORT_P1, GPIO_PIN0);//want to get red light
+        //Setting as outputs port 2
+        MAP_GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN0);//red
+        MAP_GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN1);//green
+        MAP_GPIO_setAsOutputPin(GPIO_PORT_P2, GPIO_PIN2);//blue
+
+        MAP_WDT_A_holdTimer();
+
+        uint32_t bank, sector;
+        uint32_t shift;
+        if(counter[0] != 0){
+            shift = counter[0];
+            get_flash_bank_sector((uint32_t)&counter[0], &bank, &sector);
+            FlashCtl_unprotectSector(bank, sector);
+            shift = shift << 1;
+            ROM_FlashCtl_programMemory((void*)&shift, (void*)counter, (uint32_t)2);
+            while(1){
+                MAP_GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN1);
+                __delay_cycles(10000000); //for 1000hz
+                MAP_GPIO_setOutputLowOnPin(GPIO_PORT_P2, GPIO_PIN1);
+                __delay_cycles(10000000); //for 1000hz
+            }
+        }
+        else{
+            MAP_GPIO_setOutputHighOnPin(GPIO_PORT_P1, GPIO_PIN0);
+            MAP_GPIO_setOutputHighOnPin(GPIO_PORT_P2, GPIO_PIN0);
+        }
+}
